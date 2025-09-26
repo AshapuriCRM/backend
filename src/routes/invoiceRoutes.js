@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+  createInvoice,
   processAttendanceFile,
   getCompanyInvoices,
   getInvoice,
@@ -13,6 +14,11 @@ const { validateInvoiceUpdate } = require('../middleware/validate');
 
 // Apply authentication middleware to all routes
 router.use(protect);
+
+// @route   POST /api/invoices/create
+// @desc    Create invoice from processed attendance data
+// @access  Private
+router.post('/create', createInvoice);
 
 // @route   POST /api/invoices/process-attendance
 // @desc    Process attendance file with AI

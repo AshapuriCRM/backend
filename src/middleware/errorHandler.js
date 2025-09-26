@@ -2,8 +2,13 @@ const errorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
 
-  // Log error
+  // Log error to console
   console.error('Error:', err.stack);
+
+  // Log error to file using global logError function
+  if (global.logError) {
+    global.logError(err, req);
+  }
 
   // Mongoose bad ObjectId
   if (err.name === 'CastError') {

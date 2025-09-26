@@ -3,6 +3,7 @@ const Company = require('../models/Company');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const mongoose = require('mongoose');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -44,6 +45,152 @@ const upload = multer({
   }
 }).single('attendanceFile');
 
+// @desc    Create invoice from processed attendance data
+// @route   POST /api/invoices/create
+// @access  Private
+const createInvoice = async (req, res) => {
+  try {
+    const { companyId, attendanceData, gstPaidBy = 'principal-employer', serviceChargeRate = 7, calculatedValues } = req.body;
+
+    // Validate company exists
+    const company = await Company.findById(companyId);
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        error: 'Company not found'
+      });
+    }
+
+    if (!attendanceData || !Array.isArray(attendanceData)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid attendance data is required'
+      });
+    }
+
+    // Use calculated values from frontend if provided, otherwise calculate here
+    let totalEmployees, totalPresentDays, baseTotal, serviceChargeTotal, pf, esic, roundOffSubTotal, totalBeforeTax, cgst, sgst, grandTotal;
+
+    if (calculatedValues) {
+      // Use pre-calculated values from frontend
+      totalEmployees = calculatedValues.totalEmployees;
+      totalPresentDays = calculatedValues.totalPresentDays;
+      baseTotal = calculatedValues.baseTotal;
+      serviceChargeTotal = calculatedValues.serviceCharge;
+      pf = calculatedValues.pfAmount;
+      esic = calculatedValues.esicAmount;
+      roundOffSubTotal = calculatedValues.subTotal;
+      totalBeforeTax = calculatedValues.totalBeforeTax;
+      cgst = calculatedValues.cgst;
+      sgst = calculatedValues.sgst;
+      grandTotal = calculatedValues.grandTotal;
+    } else {
+      // Fallback calculation if values not provided
+      totalEmployees = attendanceData.length;
+      totalPresentDays = attendanceData.reduce((sum, emp) => sum + emp.present_day, 0);
+      baseTotal = totalPresentDays * 466;
+      
+      const serviceCharge = baseTotal * (parseFloat(serviceChargeRate) / 100);
+      pf = baseTotal * 0.13;
+      esic = baseTotal * 0.0325;
+      const subTotal = baseTotal + pf + esic;
+      roundOffSubTotal = Math.round(subTotal);
+      serviceChargeTotal = serviceCharge;
+      totalBeforeTax = roundOffSubTotal + serviceChargeTotal;
+      cgst = totalBeforeTax * 0.09;
+      sgst = totalBeforeTax * 0.09;
+      
+      grandTotal = gstPaidBy === 'ashapuri' 
+        ? Math.round(totalBeforeTax + cgst + sgst)
+        : Math.round(totalBeforeTax);
+    }
+
+    // Calculate salary details
+    const processedEmployees = attendanceData.map(employee => {
+      const gross = employee.present_day * (calculatedValues?.perDayRate || 466);
+      const epf = gross * 0.12;
+      const esic = gross * 0.0075;
+      const net = gross - (epf + esic);
+
+      return {
+        name: employee.name,
+        presentDays: employee.present_day,
+        totalDays: employee.total_day,
+        salary: net
+      };
+    });
+
+    // Generate invoice number
+    const year = new Date().getFullYear();
+    const count = await Invoice.countDocuments({
+      createdAt: {
+        $gte: new Date(year, 0, 1),
+        $lt: new Date(year + 1, 0, 1)
+      }
+    });
+    const invoiceNumber = `INV-${year}-${String(count + 1).padStart(3, '0')}`;
+
+    // Create invoice record
+    const invoice = new Invoice({
+      invoiceNumber,
+      companyId,
+      fileName: `${invoiceNumber}.pdf`,
+      fileType: 'pdf',
+      fileUrl: `/uploads/invoices/${invoiceNumber}.pdf`,
+      fileSize: JSON.stringify(attendanceData).length,
+      taxType: 'gst',
+      paymentMethod: 'paid-by-us',
+      gstPaidBy: gstPaidBy,
+      serviceChargeRate: parseFloat(serviceChargeRate),
+      billDetails: {
+        baseAmount: baseTotal,
+        serviceCharge: serviceChargeTotal,
+        pfAmount: pf,
+        esicAmount: esic,
+        gstAmount: cgst + sgst,
+        totalAmount: grandTotal
+      },
+      attendanceData: {
+        totalEmployees,
+        totalPresentDays,
+        perDayRate: 466,
+        workingDays: Math.max(...attendanceData.map(emp => emp.total_day || 0))
+      },
+      processedData: {
+        extractedEmployees: processedEmployees,
+        processingStatus: 'completed',
+        processingDate: new Date()
+      },
+      createdBy: req.user._id
+    });
+
+    await invoice.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        invoice,
+        calculations: {
+          baseTotal,
+          serviceCharge: serviceChargeTotal,
+          pf,
+          esic,
+          cgst,
+          sgst,
+          grandTotal
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error creating invoice:', error);
+    console.error('Error details:', error.errors);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error creating invoice'
+    });
+  }
+};
+
 // @desc    Process attendance file with AI
 // @route   POST /api/invoices/process-attendance
 // @access  Private
@@ -64,10 +211,27 @@ const processAttendanceFile = async (req, res) => {
         });
       }
 
-      const { companyId, perDayRate = 466 } = req.body;
+      const { companyId, perDayRate = 466, gstPaidBy = 'principal-employer', serviceChargeRate = 7 } = req.body;
 
       // Validate company exists
+      if (!companyId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Company ID is required'
+        });
+      }
+
+      // First check if it's a valid ObjectId
+      const mongoose = require('mongoose');
+      if (!mongoose.Types.ObjectId.isValid(companyId)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid company ID format: ${companyId}`
+        });
+      }
+      
       const company = await Company.findById(companyId);
+      
       if (!company) {
         return res.status(404).json({
           success: false,
@@ -75,30 +239,72 @@ const processAttendanceFile = async (req, res) => {
         });
       }
 
-      // Create form data for AI service
-      const FormData = require('form-data');
-      const formData = new FormData();
-      const fileBuffer = await fs.readFile(req.file.path);
-      formData.append('file', fileBuffer, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype
-      });
+      // Direct Gemini API integration
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY environment variable not set');
+      }
 
-      // Call AI service
-      const axios = require('axios');
-      const aiResponse = await axios.post(
-        'https://ai-invoice-generator-python.onrender.com/upload/',
-        formData,
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const prompt = `
+You are a data extraction specialist. Extract the following information:
+1. Names of people/employees
+2. Present days (attendance days)
+3. Total days (total working days) or Absent (absent or absent days) or zero (0) if not present
+Rules:
+- Extract ALL names and their corresponding attendance data
+- If data is in table format, extract from each row
+- If data is handwritten/unstructured, identify patterns like "Name X/Y" or "Name X Y"
+- Handle variations in handwriting and formatting
+- Return ONLY valid JSON format
+Required JSON format:
+{
+    "extracted_data": [
         {
-          headers: {
-            ...formData.getHeaders()
-          },
-          timeout: 60000 // 60 second timeout
+            "name": "Person Name",
+            "present_day": number,
+            "total_day": number // or "absent_day": number
         }
-      );
+    ]
+}
+If you cannot extract certain information, use null for missing values.
+`;
+
+
+      let result;
+      const fileExtension = req.file.originalname.toLowerCase().split('.').pop();
+      
+      if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        // Handle Excel files
+        const xlsx = require('xlsx');
+        const workbook = xlsx.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const csvData = xlsx.utils.sheet_to_csv(worksheet);
+        
+        const fullPrompt = `${prompt}\n\nSpreadsheet data:\n${csvData}`;
+        result = await model.generateContent(fullPrompt);
+      } else {
+        // Handle PDF and image files
+        const fileBuffer = await fs.readFile(req.file.path);
+        const mimeType = req.file.mimetype;
+        
+        const imagePart = {
+          inlineData: {
+            data: fileBuffer.toString('base64'),
+            mimeType: mimeType
+          }
+        };
+        
+        result = await model.generateContent([prompt, imagePart]);
+      }
 
       // Process AI response
-      const cleaned = aiResponse.data.result.replace(/```json|```/g, '');
+      const responseText = result.response.text();
+      const cleaned = responseText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleaned);
       const attendanceData = parsed.extracted_data || [];
 
@@ -109,90 +315,10 @@ const processAttendanceFile = async (req, res) => {
         });
       }
 
-      // Calculate salary details
-      const processedEmployees = attendanceData.map(employee => {
-        const gross = employee.present_day * perDayRate;
-        const epf = gross * 0.12;
-        const esic = gross * 0.0075;
-        const net = gross - (epf + esic);
-
-        return {
-          name: employee.name,
-          presentDays: employee.present_day,
-          totalDays: employee.total_day,
-          salary: net
-        };
-      });
-
-      // Calculate totals
-      const totalEmployees = attendanceData.length;
-      const totalPresentDays = attendanceData.reduce((sum, emp) => sum + emp.present_day, 0);
-      const baseTotal = totalPresentDays * perDayRate;
-      
-      const serviceCharge = baseTotal * 0.07; // 7%
-      const pf = baseTotal * 0.13; // 13%
-      const esic = baseTotal * 0.0325; // 3.25%
-      const subTotal = baseTotal + pf + esic;
-      const roundOffSubTotal = Math.round(subTotal);
-      const serviceChargeTotal = serviceCharge;
-      const totalBeforeTax = roundOffSubTotal + serviceChargeTotal;
-      const cgst = totalBeforeTax * 0.09; // 9%
-      const sgst = totalBeforeTax * 0.09; // 9%
-      const grandTotal = Math.round(totalBeforeTax + cgst + sgst);
-
-      // Create invoice record
-      const invoice = new Invoice({
-        companyId,
-        fileName: req.file.originalname,
-        fileType: getFileType(req.file.originalname),
-        fileUrl: `/uploads/attendance/${req.file.filename}`,
-        fileSize: req.file.size,
-        taxType: 'gst', // Default to GST
-        paymentMethod: 'paid-by-us', // Default
-        billDetails: {
-          baseAmount: baseTotal,
-          serviceCharge: serviceChargeTotal,
-          pfAmount: pf,
-          esicAmount: esic,
-          gstAmount: cgst + sgst,
-          totalAmount: grandTotal
-        },
-        attendanceData: {
-          totalEmployees,
-          totalPresentDays,
-          perDayRate: perDayRate,
-          workingDays: Math.max(...attendanceData.map(emp => emp.total_day))
-        },
-        processedData: {
-          extractedEmployees: processedEmployees,
-          processingStatus: 'completed',
-          processingDate: new Date()
-        },
-        createdBy: req.user._id
-      });
-
-      await invoice.save();
-
       res.status(200).json({
         success: true,
         data: {
-          invoice,
-          attendanceData,
-          stats: {
-            totalEmployees,
-            totalPresentDays,
-            totalGross: baseTotal,
-            totalNet: processedEmployees.reduce((sum, emp) => sum + emp.salary, 0)
-          },
-          calculations: {
-            baseTotal,
-            serviceCharge: serviceChargeTotal,
-            pf,
-            esic,
-            cgst,
-            sgst,
-            grandTotal
-          }
+          attendanceData
         }
       });
     });
@@ -388,7 +514,7 @@ const getInvoiceStats = async (req, res) => {
     const { companyId } = req.params;
 
     const stats = await Invoice.aggregate([
-      { $match: { companyId: mongoose.Types.ObjectId(companyId) } },
+      { $match: { companyId: new mongoose.Types.ObjectId(companyId) } },
       {
         $group: {
           _id: null,
@@ -446,6 +572,7 @@ const getInvoiceStats = async (req, res) => {
 };
 
 module.exports = {
+  createInvoice,
   processAttendanceFile,
   getCompanyInvoices,
   getInvoice,

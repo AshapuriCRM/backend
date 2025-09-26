@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const invoiceSchema = new mongoose.Schema({
   invoiceNumber: {
     type: String,
-    required: [true, 'Invoice number is required'],
     unique: true,
     trim: true
   },
@@ -41,6 +40,17 @@ const invoiceSchema = new mongoose.Schema({
     type: String,
     enum: ['paid-by-us', 'paid-by-principal'],
     required: [true, 'Payment method is required']
+  },
+  gstPaidBy: {
+    type: String,
+    enum: ['principal-employer', 'ashapuri'],
+    default: 'principal-employer'
+  },
+  serviceChargeRate: {
+    type: Number,
+    default: 7,
+    min: [0, 'Service charge rate cannot be negative'],
+    max: [100, 'Service charge rate cannot exceed 100%']
   },
   billDetails: {
     baseAmount: {
