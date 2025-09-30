@@ -22,7 +22,8 @@ const createEmployeeValidation = [
     .trim()
     .isLength({ min: 2, max: 100 })
     .withMessage('Employee name must be between 2 and 100 characters'),
-  body('email')
+  body('email') 
+    .optional()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
@@ -33,6 +34,10 @@ const createEmployeeValidation = [
     .trim()
     .isLength({ min: 2, max: 50 })
     .withMessage('Category must be between 2 and 50 characters'),
+  body('categoryId')
+    .optional()
+    .isMongoId()
+    .withMessage('Please provide a valid category ID'),
   body('salary')
     .isNumeric()
     .isFloat({ min: 0 })
@@ -43,7 +48,54 @@ const createEmployeeValidation = [
   body('dateJoined')
     .optional()
     .isISO8601()
-    .withMessage('Please provide a valid date')
+    .withMessage('Please provide a valid date'),
+  // Address (optional)
+  body('address.street').optional().isString().trim(),
+  body('address.city').optional().isString().trim(),
+  body('address.state').optional().isString().trim(),
+  body('address.pinCode').optional().isString().trim(),
+  body('address.country').optional().isString().trim(),
+  // Documents (optional container)
+  body('documents.aadhar').optional().isString().trim(),
+  body('documents.pan').optional().isString().trim(),
+  // Bank account (required in schema)
+  body('documents.bankAccount.accountNumber')
+    .exists({ checkFalsy: true })
+    .withMessage('Account number is required')
+    .bail()
+    .isString()
+    .trim(),
+  body('documents.bankAccount.ifscCode')
+    .exists({ checkFalsy: true })
+    .withMessage('IFSC code is required')
+    .bail()
+    .isString()
+    .trim(),
+  body('documents.bankAccount.bankName')
+    .exists({ checkFalsy: true })
+    .withMessage('Bank name is required')
+    .bail()
+    .isString()
+    .trim(),
+  // Photo (optional)
+  body('documents.photo').optional().isString().trim(),
+  // Emergency contact (optional)
+  body('emergencyContact.name').optional().isString().trim(),
+  body('emergencyContact.relationship').optional().isString().trim(),
+  body('emergencyContact.phone').optional().isString().trim(),
+  // Work schedule (optional container, but with constraints)
+  body('workSchedule.shiftType')
+    .optional()
+    .isIn(['day', 'night', 'rotating'])
+    .withMessage('shiftType must be one of day, night, rotating'),
+  body('workSchedule.workingDays')
+    .optional()
+    .isInt({ min: 1, max: 31 })
+    .withMessage('workingDays must be between 1 and 31'),
+  body('workSchedule.workingHours')
+    .optional()
+    .isInt({ min: 1, max: 24 })
+    .withMessage('workingHours must be between 1 and 24')
 ];
 
 const updateEmployeeValidation = [
@@ -66,6 +118,10 @@ const updateEmployeeValidation = [
     .trim()
     .isLength({ min: 2, max: 50 })
     .withMessage('Category must be between 2 and 50 characters'),
+  body('categoryId')
+    .optional()
+    .isMongoId()
+    .withMessage('Please provide a valid category ID'),
   body('salary')
     .optional()
     .isNumeric()
@@ -82,7 +138,37 @@ const updateEmployeeValidation = [
   body('dateJoined')
     .optional()
     .isISO8601()
-    .withMessage('Please provide a valid date')
+    .withMessage('Please provide a valid date'),
+  // Address (optional fields)
+  body('address.street').optional().isString().trim(),
+  body('address.city').optional().isString().trim(),
+  body('address.state').optional().isString().trim(),
+  body('address.pinCode').optional().isString().trim(),
+  body('address.country').optional().isString().trim(),
+  // Documents
+  body('documents.aadhar').optional().isString().trim(),
+  body('documents.pan').optional().isString().trim(),
+  body('documents.bankAccount.accountNumber').optional().isString().trim(),
+  body('documents.bankAccount.ifscCode').optional().isString().trim(),
+  body('documents.bankAccount.bankName').optional().isString().trim(),
+  body('documents.photo').optional().isString().trim(),
+  // Emergency contact
+  body('emergencyContact.name').optional().isString().trim(),
+  body('emergencyContact.relationship').optional().isString().trim(),
+  body('emergencyContact.phone').optional().isString().trim(),
+  // Work schedule
+  body('workSchedule.shiftType')
+    .optional()
+    .isIn(['day', 'night', 'rotating'])
+    .withMessage('shiftType must be one of day, night, rotating'),
+  body('workSchedule.workingDays')
+    .optional()
+    .isInt({ min: 1, max: 31 })
+    .withMessage('workingDays must be between 1 and 31'),
+  body('workSchedule.workingHours')
+    .optional()
+    .isInt({ min: 1, max: 24 })
+    .withMessage('workingHours must be between 1 and 24')
 ];
 
 const statusUpdateValidation = [

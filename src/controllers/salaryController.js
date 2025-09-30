@@ -7,8 +7,10 @@ const mongoose = require('mongoose');
 // @route   POST /api/salary/create-bulk
 // @access  Private
 const createBulkSalarySlips = async (req, res) => {
+  console.log("> reached POST /api/salary/create-bulk")
   try {
     const { companyId, month, year, employees, payPeriod } = req.body;
+    console.log({...req.body})
 
     // Validate company exists
     const company = await Company.findById(companyId);

@@ -22,6 +22,7 @@ const createEmployee = async (req, res) => {
       phone,
       address,
       category,
+      categoryId,
       dateJoined,
       salary,
       companyId,
@@ -55,6 +56,7 @@ const createEmployee = async (req, res) => {
       phone,
       address,
       category,
+      categoryId,
       dateJoined,
       salary,
       companyId,
@@ -214,6 +216,7 @@ const updateEmployee = async (req, res) => {
       phone,
       address,
       category,
+      categoryId,
       dateJoined,
       salary,
       companyId,
@@ -255,6 +258,7 @@ const updateEmployee = async (req, res) => {
     if (phone) employee.phone = phone;
     if (address) employee.address = { ...employee.address, ...address };
     if (category) employee.category = category;
+    if (categoryId) employee.categoryId = categoryId;
     if (dateJoined) employee.dateJoined = dateJoined;
     if (salary) employee.salary = salary;
     if (companyId) employee.companyId = companyId;

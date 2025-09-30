@@ -9,7 +9,6 @@ const employeeSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: [true, 'Email is required'],
     lowercase: true,
     trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
@@ -60,9 +59,9 @@ const employeeSchema = new mongoose.Schema({
     aadhar: { type: String, trim: true },
     pan: { type: String, trim: true, uppercase: true },
     bankAccount: {
-      accountNumber: { type: String, trim: true },
-      ifscCode: { type: String, trim: true, uppercase: true },
-      bankName: { type: String, trim: true }
+      accountNumber: { type: String, trim: true, required: [true, 'Account number is required'] },
+      ifscCode: { type: String, trim: true, uppercase: true, required: [true, 'IFSC code is required'] },
+      bankName: { type: String, trim: true, required: [true, 'Bank name is required'] }
     },
     photo: { type: String, trim: true }
   },

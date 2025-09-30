@@ -170,39 +170,52 @@ salarySlipSchema.index({ companyId: 1, year: 1, month: 1 });
 salarySlipSchema.index({ status: 1 });
 salarySlipSchema.index({ 'payPeriod.startDate': 1, 'payPeriod.endDate': 1 });
 
-// Pre-save middleware to calculate total deductions
-salarySlipSchema.pre('save', function(next) {
-  const deductions = this.deductions;
-  this.deductions.totalDeductions = 
-    deductions.pf.employeeContribution +
-    deductions.esic.employeeContribution +
-    deductions.tax.tds +
-    deductions.tax.professionalTax +
-    deductions.other.advance +
-    deductions.other.loan +
-    deductions.other.penalty;
-  
-  // Calculate total salary
-  this.totalSalary = this.salary.grossSalary - this.deductions.totalDeductions + this.bonus;
-  
+// Pre-validate middleware to calculate total deductions
+salarySlipSchema.pre('validate', function(next) {
+  const deductions = this.deductions || {};
+  const pf = deductions.pf || {};
+  const esic = deductions.esic || {};
+  const tax = deductions.tax || {};
+  const other = deductions.other || {};
+
+  const totalDeductions =
+    Number(pf.employeeContribution || 0) +
+    Number(esic.employeeContribution || 0) +
+    Number(tax.tds || 0) +
+    Number(tax.professionalTax || 0) +
+    Number(other.advance || 0) +
+    Number(other.loan || 0) +
+    Number(other.penalty || 0);
+
+  this.deductions.totalDeductions = totalDeductions;
+
+  const gross = Number(this.salary?.grossSalary || 0);
+  const bonus = Number(this.bonus || 0);
+  this.totalSalary = Math.max(0, gross - totalDeductions + bonus);
+
   next();
 });
 
-// Pre-save middleware to validate attendance
-salarySlipSchema.pre('save', function(next) {
-  if (this.attendance.daysPresent + this.attendance.daysAbsent > this.attendance.totalWorkingDays) {
-    const error = new Error('Days present + days absent cannot exceed total working days');
-    return next(error);
+// Pre-validate middleware to ensure attendance consistency
+salarySlipSchema.pre('validate', function(next) {
+  if (
+    this.attendance &&
+    this.attendance.daysPresent + this.attendance.daysAbsent >
+      this.attendance.totalWorkingDays
+  ) {
+    return next(
+      new Error('Days present + days absent cannot exceed total working days')
+    );
   }
   next();
 });
 
-// Pre-save middleware to set employee name from Employee document
-salarySlipSchema.pre('save', async function(next) {
-  if (this.isNew || this.isModified('employeeId')) {
+// Pre-validate middleware to set employee name from Employee document
+salarySlipSchema.pre('validate', async function(next) {
+  if (!this.employeeName || this.isNew || this.isModified('employeeId')) {
     try {
       const Employee = mongoose.model('Employee');
-      const employee = await Employee.findById(this.employeeId);
+      const employee = await Employee.findById(this.employeeId).select('name');
       if (employee) {
         this.employeeName = employee.name;
       }
