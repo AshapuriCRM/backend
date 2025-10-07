@@ -136,6 +136,18 @@ app.get("/health", (req, res) => {
   });
 });
 
+// Root route for platform health checks
+app.get("/", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "Ashapuri CRM API is running",
+    health: "/health",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+  });
+});
+app.head("/", (req, res) => res.status(200).end());
+
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/companies", companyRoutes);
