@@ -1,18 +1,19 @@
-const Employee = require('../models/Employee');
-const Company = require('../models/Company');
-const mongoose = require('mongoose');
-const { validationResult } = require('express-validator');
+const Employee = require("../models/Employee");
+const Company = require("../models/Company");
+const mongoose = require("mongoose");
+const { validationResult } = require("express-validator");
 
 // @desc    Create new employee
 // @route   POST /api/employees
 // @access  Private
 const createEmployee = async (req, res) => {
+  console.log("> req reached ");
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        errors: errors.array()
+        errors: errors.array(),
       });
     }
 
@@ -28,7 +29,7 @@ const createEmployee = async (req, res) => {
       companyId,
       documents,
       emergencyContact,
-      workSchedule
+      workSchedule,
     } = req.body;
 
     // Check if company exists
@@ -36,7 +37,7 @@ const createEmployee = async (req, res) => {
     if (!company) {
       return res.status(404).json({
         success: false,
-        error: 'Company not found'
+        error: "Company not found",
       });
     }
 
@@ -45,7 +46,7 @@ const createEmployee = async (req, res) => {
     if (existingEmployee) {
       return res.status(400).json({
         success: false,
-        error: 'Employee with this email already exists'
+        error: "Employee with this email already exists",
       });
     }
 
@@ -63,23 +64,23 @@ const createEmployee = async (req, res) => {
       documents,
       emergencyContact,
       workSchedule,
-      createdBy: req.user._id
+      createdBy: req.user._id,
     });
 
     await employee.save();
 
     // Populate company info before returning
-    await employee.populate('companyId', 'name location');
+    await employee.populate("companyId", "name location");
 
     res.status(201).json({
       success: true,
-      data: employee
+      data: employee,
     });
   } catch (error) {
-    console.error('Create employee error:', error);
+    console.error("Create employee error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error creating employee'
+      error: error.message || "Error creating employee",
     });
   }
 };
@@ -96,13 +97,13 @@ const getEmployees = async (req, res) => {
       status,
       category,
       search,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
+      sortBy = "createdAt",
+      sortOrder = "desc",
     } = req.query;
 
     // Build query
     const query = {};
-    
+
     if (companyId) {
       query.companyId = companyId;
     }
@@ -112,25 +113,25 @@ const getEmployees = async (req, res) => {
     }
 
     if (category) {
-      query.category = { $regex: category, $options: 'i' };
+      query.category = { $regex: category, $options: "i" };
     }
 
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
       ];
     }
 
     // Build sort object
     const sort = {};
-    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
     // Execute query with pagination
     const employees = await Employee.find(query)
-      .populate('companyId', 'name location')
-      .populate('createdBy', 'name email')
+      .populate("companyId", "name location")
+      .populate("createdBy", "name email")
       .sort(sort)
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -146,15 +147,15 @@ const getEmployees = async (req, res) => {
           total,
           pages: Math.ceil(total / limit),
           page: parseInt(page),
-          limit: parseInt(limit)
-        }
-      }
+          limit: parseInt(limit),
+        },
+      },
     });
   } catch (error) {
-    console.error('Get employees error:', error);
+    console.error("Get employees error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error fetching employees'
+      error: error.message || "Error fetching employees",
     });
   }
 };
@@ -165,25 +166,25 @@ const getEmployees = async (req, res) => {
 const getEmployee = async (req, res) => {
   try {
     const employee = await Employee.findById(req.params.id)
-      .populate('companyId', 'name location contactInfo')
-      .populate('createdBy', 'name email');
+      .populate("companyId", "name location contactInfo")
+      .populate("createdBy", "name email");
 
     if (!employee) {
       return res.status(404).json({
         success: false,
-        error: 'Employee not found'
+        error: "Employee not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: employee
+      data: employee,
     });
   } catch (error) {
-    console.error('Get employee error:', error);
+    console.error("Get employee error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error fetching employee'
+      error: error.message || "Error fetching employee",
     });
   }
 };
@@ -197,7 +198,7 @@ const updateEmployee = async (req, res) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        errors: errors.array()
+        errors: errors.array(),
       });
     }
 
@@ -206,7 +207,7 @@ const updateEmployee = async (req, res) => {
     if (!employee) {
       return res.status(404).json({
         success: false,
-        error: 'Employee not found'
+        error: "Employee not found",
       });
     }
 
@@ -223,20 +224,20 @@ const updateEmployee = async (req, res) => {
       documents,
       emergencyContact,
       workSchedule,
-      status
+      status,
     } = req.body;
 
     // Check if email is being changed and if new email already exists
     if (email && email !== employee.email) {
       const existingEmployee = await Employee.findOne({
         email,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
 
       if (existingEmployee) {
         return res.status(400).json({
           success: false,
-          error: 'Employee with this email already exists'
+          error: "Employee with this email already exists",
         });
       }
     }
@@ -247,7 +248,7 @@ const updateEmployee = async (req, res) => {
       if (!company) {
         return res.status(404).json({
           success: false,
-          error: 'Company not found'
+          error: "Company not found",
         });
       }
     }
@@ -263,24 +264,29 @@ const updateEmployee = async (req, res) => {
     if (salary) employee.salary = salary;
     if (companyId) employee.companyId = companyId;
     if (documents) employee.documents = { ...employee.documents, ...documents };
-    if (emergencyContact) employee.emergencyContact = { ...employee.emergencyContact, ...emergencyContact };
-    if (workSchedule) employee.workSchedule = { ...employee.workSchedule, ...workSchedule };
+    if (emergencyContact)
+      employee.emergencyContact = {
+        ...employee.emergencyContact,
+        ...emergencyContact,
+      };
+    if (workSchedule)
+      employee.workSchedule = { ...employee.workSchedule, ...workSchedule };
     if (status) employee.status = status;
 
     await employee.save();
 
     // Populate company info before returning
-    await employee.populate('companyId', 'name location');
+    await employee.populate("companyId", "name location");
 
     res.status(200).json({
       success: true,
-      data: employee
+      data: employee,
     });
   } catch (error) {
-    console.error('Update employee error:', error);
+    console.error("Update employee error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error updating employee'
+      error: error.message || "Error updating employee",
     });
   }
 };
@@ -295,7 +301,7 @@ const deleteEmployee = async (req, res) => {
     if (!employee) {
       return res.status(404).json({
         success: false,
-        error: 'Employee not found'
+        error: "Employee not found",
       });
     }
 
@@ -303,13 +309,13 @@ const deleteEmployee = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Employee deleted successfully'
+      message: "Employee deleted successfully",
     });
   } catch (error) {
-    console.error('Delete employee error:', error);
+    console.error("Delete employee error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error deleting employee'
+      error: error.message || "Error deleting employee",
     });
   }
 };
@@ -320,42 +326,42 @@ const deleteEmployee = async (req, res) => {
 const getEmployeesByCompany = async (req, res) => {
   try {
     const { companyId } = req.params;
-    const { status = 'active', limit = 50 } = req.query;
+    const { status = "active", limit = 50 } = req.query;
 
     // Check if company exists
     const company = await Company.findById(companyId);
     if (!company) {
       return res.status(404).json({
         success: false,
-        error: 'Company not found'
+        error: "Company not found",
       });
     }
 
     const employees = await Employee.find({
       companyId,
-      ...(status && { status })
+      ...(status && { status }),
     })
-    .select('name email phone category salary status dateJoined')
-    .sort({ name: 1 })
-    .limit(parseInt(limit))
-    .lean();
+      .select("name email phone category salary status dateJoined")
+      .sort({ name: 1 })
+      .limit(parseInt(limit))
+      .lean();
 
     res.status(200).json({
       success: true,
       data: {
         company: {
           name: company.name,
-          location: company.location
+          location: company.location,
         },
         employees,
-        count: employees.length
-      }
+        count: employees.length,
+      },
     });
   } catch (error) {
-    console.error('Get employees by company error:', error);
+    console.error("Get employees by company error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error fetching employees by company'
+      error: error.message || "Error fetching employees by company",
     });
   }
 };
@@ -366,11 +372,12 @@ const getEmployeesByCompany = async (req, res) => {
 const updateEmployeeStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    
-    if (!['active', 'inactive', 'terminated', 'on-leave'].includes(status)) {
+
+    if (!["active", "inactive", "terminated", "on-leave"].includes(status)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid status. Must be active, inactive, terminated, or on-leave'
+        error:
+          "Invalid status. Must be active, inactive, terminated, or on-leave",
       });
     }
 
@@ -379,7 +386,7 @@ const updateEmployeeStatus = async (req, res) => {
     if (!employee) {
       return res.status(404).json({
         success: false,
-        error: 'Employee not found'
+        error: "Employee not found",
       });
     }
 
@@ -388,13 +395,13 @@ const updateEmployeeStatus = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: employee
+      data: employee,
     });
   } catch (error) {
-    console.error('Update employee status error:', error);
+    console.error("Update employee status error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error updating employee status'
+      error: error.message || "Error updating employee status",
     });
   }
 };
@@ -409,17 +416,17 @@ const searchEmployees = async (req, res) => {
     if (!q || q.length < 2) {
       return res.status(400).json({
         success: false,
-        error: 'Search query must be at least 2 characters long'
+        error: "Search query must be at least 2 characters long",
       });
     }
 
     const query = {
       $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } }
+        { name: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } },
+        { phone: { $regex: q, $options: "i" } },
       ],
-      status: 'active'
+      status: "active",
     };
 
     if (companyId) {
@@ -427,20 +434,20 @@ const searchEmployees = async (req, res) => {
     }
 
     const employees = await Employee.find(query)
-      .populate('companyId', 'name location')
-      .select('name email phone category salary companyId')
+      .populate("companyId", "name location")
+      .select("name email phone category salary companyId")
       .limit(parseInt(limit))
       .lean();
 
     res.status(200).json({
       success: true,
-      data: employees
+      data: employees,
     });
   } catch (error) {
-    console.error('Search employees error:', error);
+    console.error("Search employees error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error searching employees'
+      error: error.message || "Error searching employees",
     });
   }
 };
@@ -451,8 +458,10 @@ const searchEmployees = async (req, res) => {
 const getEmployeeStats = async (req, res) => {
   try {
     const { companyId } = req.query;
-    
-    const matchStage = companyId ? { companyId: new mongoose.Types.ObjectId(companyId) } : {};
+
+    const matchStage = companyId
+      ? { companyId: new mongoose.Types.ObjectId(companyId) }
+      : {};
 
     const stats = await Employee.aggregate([
       { $match: matchStage },
@@ -461,21 +470,21 @@ const getEmployeeStats = async (req, res) => {
           _id: null,
           totalEmployees: { $sum: 1 },
           activeEmployees: {
-            $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
           },
           inactiveEmployees: {
-            $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "inactive"] }, 1, 0] },
           },
           terminatedEmployees: {
-            $sum: { $cond: [{ $eq: ['$status', 'terminated'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "terminated"] }, 1, 0] },
           },
           onLeaveEmployees: {
-            $sum: { $cond: [{ $eq: ['$status', 'on-leave'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "on-leave"] }, 1, 0] },
           },
-          averageSalary: { $avg: '$salary' },
-          totalSalaryExpense: { $sum: '$salary' }
-        }
-      }
+          averageSalary: { $avg: "$salary" },
+          totalSalaryExpense: { $sum: "$salary" },
+        },
+      },
     ]);
 
     const result = stats[0] || {
@@ -485,18 +494,18 @@ const getEmployeeStats = async (req, res) => {
       terminatedEmployees: 0,
       onLeaveEmployees: 0,
       averageSalary: 0,
-      totalSalaryExpense: 0
+      totalSalaryExpense: 0,
     };
 
     res.status(200).json({
       success: true,
-      data: result
+      data: result,
     });
   } catch (error) {
-    console.error('Get employee stats error:', error);
+    console.error("Get employee stats error:", error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Error fetching employee statistics'
+      error: error.message || "Error fetching employee statistics",
     });
   }
 };
@@ -510,5 +519,5 @@ module.exports = {
   getEmployeesByCompany,
   updateEmployeeStatus,
   searchEmployees,
-  getEmployeeStats
+  getEmployeeStats,
 };

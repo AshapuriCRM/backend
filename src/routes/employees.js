@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require("express");
 const {
   createEmployee,
   getEmployees,
@@ -8,173 +8,172 @@ const {
   getEmployeesByCompany,
   updateEmployeeStatus,
   searchEmployees,
-  getEmployeeStats
-} = require('../controllers/employeeController');
-const { protect } = require('../middleware/auth');
-const { body } = require('express-validator');
-const { validate } = require('../middleware/validate');
+  getEmployeeStats,
+} = require("../controllers/employeeController");
+const { protect } = require("../middleware/auth");
+const { body } = require("express-validator");
+const { validate } = require("../middleware/validate");
 
 const router = express.Router();
 
 // Validation rules
 const createEmployeeValidation = [
-  body('name')
+  body("name")
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('Employee name must be between 2 and 100 characters'),
-  body('email') 
+    .withMessage("Employee name must be between 2 and 100 characters"),
+  body("email")
     .optional()
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
-  body('phone')
+    .isString()
+    .withMessage("Please provide a valid email"),
+  body("phone")
     .matches(/^[+]?[\d\s-()]{10,15}$/)
-    .withMessage('Please provide a valid phone number'),
-  body('category')
+    .withMessage("Please provide a valid phone number"),
+  body("category")
     .trim()
     .isLength({ min: 2, max: 50 })
-    .withMessage('Category must be between 2 and 50 characters'),
-  body('categoryId')
+    .withMessage("Category must be between 2 and 50 characters"),
+  body("categoryId")
     .optional()
     .isMongoId()
-    .withMessage('Please provide a valid category ID'),
-  body('salary')
+    .withMessage("Please provide a valid category ID"),
+  body("salary")
     .isNumeric()
     .isFloat({ min: 0 })
-    .withMessage('Salary must be a positive number'),
-  body('companyId')
+    .withMessage("Salary must be a positive number"),
+  body("companyId")
     .isMongoId()
-    .withMessage('Please provide a valid company ID'),
-  body('dateJoined')
+    .withMessage("Please provide a valid company ID"),
+  body("dateJoined")
     .optional()
     .isISO8601()
-    .withMessage('Please provide a valid date'),
+    .withMessage("Please provide a valid date"),
   // Address (optional)
-  body('address.street').optional().isString().trim(),
-  body('address.city').optional().isString().trim(),
-  body('address.state').optional().isString().trim(),
-  body('address.pinCode').optional().isString().trim(),
-  body('address.country').optional().isString().trim(),
+  body("address.street").optional().isString().trim(),
+  body("address.city").optional().isString().trim(),
+  body("address.state").optional().isString().trim(),
+  body("address.pinCode").optional().isString().trim(),
+  body("address.country").optional().isString().trim(),
   // Documents (optional container)
-  body('documents.aadhar').optional().isString().trim(),
-  body('documents.pan').optional().isString().trim(),
+  body("documents.aadhar").optional().isString().trim(),
+  body("documents.pan").optional().isString().trim(),
   // Bank account (required in schema)
-  body('documents.bankAccount.accountNumber')
+  body("documents.bankAccount.accountNumber")
     .exists({ checkFalsy: true })
-    .withMessage('Account number is required')
+    .withMessage("Account number is required")
     .bail()
     .isString()
     .trim(),
-  body('documents.bankAccount.ifscCode')
+  body("documents.bankAccount.ifscCode")
     .exists({ checkFalsy: true })
-    .withMessage('IFSC code is required')
+    .withMessage("IFSC code is required")
     .bail()
     .isString()
     .trim(),
-  body('documents.bankAccount.bankName')
+  body("documents.bankAccount.bankName")
     .exists({ checkFalsy: true })
-    .withMessage('Bank name is required')
+    .withMessage("Bank name is required")
     .bail()
     .isString()
     .trim(),
   // Photo (optional)
-  body('documents.photo').optional().isString().trim(),
+  body("documents.photo").optional().isString().trim(),
   // Emergency contact (optional)
-  body('emergencyContact.name').optional().isString().trim(),
-  body('emergencyContact.relationship').optional().isString().trim(),
-  body('emergencyContact.phone').optional().isString().trim(),
+  body("emergencyContact.name").optional().isString().trim(),
+  body("emergencyContact.relationship").optional().isString().trim(),
+  body("emergencyContact.phone").optional().isString().trim(),
   // Work schedule (optional container, but with constraints)
-  body('workSchedule.shiftType')
+  body("workSchedule.shiftType")
     .optional()
-    .isIn(['day', 'night', 'rotating'])
-    .withMessage('shiftType must be one of day, night, rotating'),
-  body('workSchedule.workingDays')
+    .isIn(["day", "night", "rotating"])
+    .withMessage("shiftType must be one of day, night, rotating"),
+  body("workSchedule.workingDays")
     .optional()
     .isInt({ min: 1, max: 31 })
-    .withMessage('workingDays must be between 1 and 31'),
-  body('workSchedule.workingHours')
+    .withMessage("workingDays must be between 1 and 31"),
+  body("workSchedule.workingHours")
     .optional()
     .isInt({ min: 1, max: 24 })
-    .withMessage('workingHours must be between 1 and 24')
+    .withMessage("workingHours must be between 1 and 24"),
 ];
 
 const updateEmployeeValidation = [
-  body('name')
+  body("name")
     .optional()
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('Employee name must be between 2 and 100 characters'),
-  body('email')
+    .withMessage("Employee name must be between 2 and 100 characters"),
+  body("email")
     .optional()
     .isEmail()
     .normalizeEmail()
-    .withMessage('Please provide a valid email'),
-  body('phone')
+    .withMessage("Please provide a valid email"),
+  body("phone")
     .optional()
     .matches(/^[+]?[\d\s-()]{10,15}$/)
-    .withMessage('Please provide a valid phone number'),
-  body('category')
+    .withMessage("Please provide a valid phone number"),
+  body("category")
     .optional()
     .trim()
     .isLength({ min: 2, max: 50 })
-    .withMessage('Category must be between 2 and 50 characters'),
-  body('categoryId')
+    .withMessage("Category must be between 2 and 50 characters"),
+  body("categoryId")
     .optional()
     .isMongoId()
-    .withMessage('Please provide a valid category ID'),
-  body('salary')
+    .withMessage("Please provide a valid category ID"),
+  body("salary")
     .optional()
     .isNumeric()
     .isFloat({ min: 0 })
-    .withMessage('Salary must be a positive number'),
-  body('companyId')
+    .withMessage("Salary must be a positive number"),
+  body("companyId")
     .optional()
     .isMongoId()
-    .withMessage('Please provide a valid company ID'),
-  body('status')
+    .withMessage("Please provide a valid company ID"),
+  body("status")
     .optional()
-    .isIn(['active', 'inactive', 'terminated', 'on-leave'])
-    .withMessage('Status must be active, inactive, terminated, or on-leave'),
-  body('dateJoined')
+    .isIn(["active", "inactive", "terminated", "on-leave"])
+    .withMessage("Status must be active, inactive, terminated, or on-leave"),
+  body("dateJoined")
     .optional()
     .isISO8601()
-    .withMessage('Please provide a valid date'),
+    .withMessage("Please provide a valid date"),
   // Address (optional fields)
-  body('address.street').optional().isString().trim(),
-  body('address.city').optional().isString().trim(),
-  body('address.state').optional().isString().trim(),
-  body('address.pinCode').optional().isString().trim(),
-  body('address.country').optional().isString().trim(),
+  body("address.street").optional().isString().trim(),
+  body("address.city").optional().isString().trim(),
+  body("address.state").optional().isString().trim(),
+  body("address.pinCode").optional().isString().trim(),
+  body("address.country").optional().isString().trim(),
   // Documents
-  body('documents.aadhar').optional().isString().trim(),
-  body('documents.pan').optional().isString().trim(),
-  body('documents.bankAccount.accountNumber').optional().isString().trim(),
-  body('documents.bankAccount.ifscCode').optional().isString().trim(),
-  body('documents.bankAccount.bankName').optional().isString().trim(),
-  body('documents.photo').optional().isString().trim(),
+  body("documents.aadhar").optional().isString().trim(),
+  body("documents.pan").optional().isString().trim(),
+  body("documents.bankAccount.accountNumber").optional().isString().trim(),
+  body("documents.bankAccount.ifscCode").optional().isString().trim(),
+  body("documents.bankAccount.bankName").optional().isString().trim(),
+  body("documents.photo").optional().isString().trim(),
   // Emergency contact
-  body('emergencyContact.name').optional().isString().trim(),
-  body('emergencyContact.relationship').optional().isString().trim(),
-  body('emergencyContact.phone').optional().isString().trim(),
+  body("emergencyContact.name").optional().isString().trim(),
+  body("emergencyContact.relationship").optional().isString().trim(),
+  body("emergencyContact.phone").optional().isString().trim(),
   // Work schedule
-  body('workSchedule.shiftType')
+  body("workSchedule.shiftType")
     .optional()
-    .isIn(['day', 'night', 'rotating'])
-    .withMessage('shiftType must be one of day, night, rotating'),
-  body('workSchedule.workingDays')
+    .isIn(["day", "night", "rotating"])
+    .withMessage("shiftType must be one of day, night, rotating"),
+  body("workSchedule.workingDays")
     .optional()
     .isInt({ min: 1, max: 31 })
-    .withMessage('workingDays must be between 1 and 31'),
-  body('workSchedule.workingHours')
+    .withMessage("workingDays must be between 1 and 31"),
+  body("workSchedule.workingHours")
     .optional()
     .isInt({ min: 1, max: 24 })
-    .withMessage('workingHours must be between 1 and 24')
+    .withMessage("workingHours must be between 1 and 24"),
 ];
 
 const statusUpdateValidation = [
-  body('status')
-    .isIn(['active', 'inactive', 'terminated', 'on-leave'])
-    .withMessage('Status must be active, inactive, terminated, or on-leave')
+  body("status")
+    .isIn(["active", "inactive", "terminated", "on-leave"])
+    .withMessage("Status must be active, inactive, terminated, or on-leave"),
 ];
 
 // Apply authentication middleware to all routes
@@ -183,46 +182,51 @@ router.use(protect);
 // @route   GET /api/employees/stats
 // @desc    Get employee statistics
 // @access  Private
-router.get('/stats', getEmployeeStats);
+router.get("/stats", getEmployeeStats);
 
 // @route   GET /api/employees/search
 // @desc    Search employees
 // @access  Private
-router.get('/search', searchEmployees);
+router.get("/search", searchEmployees);
 
 // @route   GET /api/employees/company/:companyId
 // @desc    Get employees by company
 // @access  Private
-router.get('/company/:companyId', getEmployeesByCompany);
+router.get("/company/:companyId", getEmployeesByCompany);
 
 // @route   POST /api/employees
 // @desc    Create new employee
 // @access  Private
-router.post('/', createEmployeeValidation, validate, createEmployee);
+router.post("/", createEmployeeValidation, validate, createEmployee);
 
 // @route   GET /api/employees
 // @desc    Get all employees with pagination
 // @access  Private
-router.get('/', getEmployees);
+router.get("/", getEmployees);
 
 // @route   GET /api/employees/:id
 // @desc    Get single employee
 // @access  Private
-router.get('/:id', getEmployee);
+router.get("/:id", getEmployee);
 
 // @route   PUT /api/employees/:id
 // @desc    Update employee
 // @access  Private
-router.put('/:id', updateEmployeeValidation, validate, updateEmployee);
+router.put("/:id", updateEmployeeValidation, validate, updateEmployee);
 
 // @route   PUT /api/employees/:id/status
 // @desc    Update employee status
 // @access  Private
-router.put('/:id/status', statusUpdateValidation, validate, updateEmployeeStatus);
+router.put(
+  "/:id/status",
+  statusUpdateValidation,
+  validate,
+  updateEmployeeStatus
+);
 
 // @route   DELETE /api/employees/:id
 // @desc    Delete employee
 // @access  Private
-router.delete('/:id', deleteEmployee);
+router.delete("/:id", deleteEmployee);
 
 module.exports = router;
