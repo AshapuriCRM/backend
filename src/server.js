@@ -44,6 +44,7 @@ app.use(
         "http://localhost:3002",
         "https://frontend-34r69it9n-ashapuricrms-projects.vercel.app",
         "https://frontend-git-yatharth-ashapuricrms-projects.vercel.app",
+        "https://frontend-delta-ruddy-74.vercel.app",
       ].filter(Boolean);
 
       if (allowedOrigins.includes(origin)) {
