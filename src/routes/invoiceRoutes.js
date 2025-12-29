@@ -9,6 +9,7 @@ const {
   deleteInvoice,
   getInvoiceStats,
   getAllInvoices,
+  uploadInvoiceFile,
 } = require("../controllers/invoiceController");
 const { protect } = require("../middleware/auth");
 const { validateInvoiceUpdate } = require("../middleware/validate");
@@ -25,6 +26,11 @@ router.post("/create", createInvoice);
 // @desc    Process attendance file with AI
 // @access  Private
 router.post("/process-attendance", processAttendanceFile);
+
+// @route   POST /api/invoices/upload-file
+// @desc    Upload invoice file to Cloudinary
+// @access  Private
+router.post("/upload-file", uploadInvoiceFile);
 
 // @route   GET /api/invoices/company/:companyId
 // @desc    Get all invoices for a company

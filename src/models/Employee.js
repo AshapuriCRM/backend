@@ -44,6 +44,9 @@ const employeeSchema = new mongoose.Schema(
       required: [true, "Date joined is required"],
       default: Date.now,
     },
+    dob: {
+      type: Date,
+    },
     salary: {
       type: Number,
       required: [true, "Salary is required"],
@@ -62,6 +65,7 @@ const employeeSchema = new mongoose.Schema(
     documents: {
       aadhar: { type: String, trim: true },
       pan: { type: String, trim: true, uppercase: true },
+      uan: { type: String, trim: true, uppercase: true },
       bankAccount: {
         accountNumber: {
           type: String,
@@ -95,6 +99,30 @@ const employeeSchema = new mongoose.Schema(
       },
       workingDays: { type: Number, default: 26, min: 1, max: 31 },
       workingHours: { type: Number, default: 8, min: 1, max: 24 },
+    },
+    pf: {
+      type: {
+        type: String,
+        enum: ["percentage", "fixed"],
+        default: "percentage",
+      },
+      value: {
+        type: Number,
+        min: [0, "PF value cannot be negative"],
+        default: 12,
+      },
+    },
+    esic: {
+      type: {
+        type: String,
+        enum: ["percentage", "fixed"],
+        default: "percentage",
+      },
+      value: {
+        type: Number,
+        min: [0, "ESIC value cannot be negative"],
+        default: 0.75,
+      },
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

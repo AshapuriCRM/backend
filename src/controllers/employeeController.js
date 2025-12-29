@@ -2,35 +2,54 @@ const Employee = require("../models/Employee");
 const Company = require("../models/Company");
 const mongoose = require("mongoose");
 const { validationResult } = require("express-validator");
+const { uploadEmployeePhotoToCloudinary } = require("../utils/imageUploader");
 
 // @desc    Create new employee
 // @route   POST /api/employees
 // @access  Private
 const createEmployee = async (req, res) => {
-  console.log("> req reached ");
+  console.log("[Employees][Create] Request reached.");
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      // Cleanup uploaded temp file if present
+      try {
+        if (req.file && req.file.path) {
+          const fs = require("fs");
+          if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        }
+      } catch (_e) {}
       return res.status(400).json({
         success: false,
         errors: errors.array(),
       });
     }
 
-    const {
-      name,
-      email,
-      phone,
-      address,
-      category,
-      categoryId,
-      dateJoined,
-      salary,
-      companyId,
-      documents,
-      emergencyContact,
-      workSchedule,
-    } = req.body;
+    // Handle JSON bodies that may come in as strings due to multipart/form-data
+    const parseMaybeJSON = (val) => {
+      if (typeof val !== "string") return val;
+      try {
+        return JSON.parse(val);
+      } catch (_e) {
+        return val;
+      }
+    };
+
+    const name = req.body.name;
+    const email = req.body.email;
+    const phone = req.body.phone;
+    const address = parseMaybeJSON(req.body.address);
+    const category = req.body.category;
+    const categoryId = req.body.categoryId;
+    const dateJoined = req.body.dateJoined;
+    const dob = req.body.dob;
+    const salary = req.body.salary;
+    const companyId = req.body.companyId;
+    const documents = parseMaybeJSON(req.body.documents) || {};
+    const emergencyContact = parseMaybeJSON(req.body.emergencyContact);
+    const workSchedule = parseMaybeJSON(req.body.workSchedule);
+    const pf = parseMaybeJSON(req.body.pf);
+    const esic = parseMaybeJSON(req.body.esic);
 
     // Check if company exists
     const company = await Company.findById(companyId);
@@ -42,12 +61,39 @@ const createEmployee = async (req, res) => {
     }
 
     // Check if employee with same email already exists
-    const existingEmployee = await Employee.findOne({ email });
-    if (existingEmployee) {
-      return res.status(400).json({
-        success: false,
-        error: "Employee with this email already exists",
-      });
+    if (email) {
+      const existingEmployee = await Employee.findOne({ email });
+      if (existingEmployee) {
+        return res.status(400).json({
+          success: false,
+          error: "Employee with this email already exists",
+        });
+      }
+    }
+
+    // Upload photo to Cloudinary if provided
+    let photoUrl = documents?.photo;
+    if (req.file && req.file.path) {
+      try {
+        console.log(
+          `[Employees][Create] Photo file present. Uploading to Cloudinary. path=${req.file.path}`
+        );
+        const uploaded = await uploadEmployeePhotoToCloudinary(req.file.path, {
+          folder: `employee-photos/${companyId}`,
+        });
+        photoUrl = uploaded.secure_url;
+        console.log(
+          `[Employees][Create] Photo uploaded to Cloudinary. url=${photoUrl}`
+        );
+      } catch (uploadErr) {
+        console.error(
+          `[Employees][Create] Failed uploading photo to Cloudinary: ${uploadErr?.message}`
+        );
+        return res.status(500).json({
+          success: false,
+          error: uploadErr.message || "Failed to upload photo",
+        });
+      }
     }
 
     // Create employee
@@ -59,11 +105,14 @@ const createEmployee = async (req, res) => {
       category,
       categoryId,
       dateJoined,
+      dob,
       salary,
       companyId,
-      documents,
+      documents: { ...(documents || {}), photo: photoUrl },
       emergencyContact,
       workSchedule,
+      pf,
+      esic,
       createdBy: req.user._id,
     });
 
@@ -77,7 +126,7 @@ const createEmployee = async (req, res) => {
       data: employee,
     });
   } catch (error) {
-    console.error("Create employee error:", error);
+    console.error("[Employees][Create] Error:", error);
     res.status(500).json({
       success: false,
       error: error.message || "Error creating employee",
@@ -196,6 +245,13 @@ const updateEmployee = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      // Cleanup uploaded temp file if present
+      try {
+        if (req.file && req.file.path) {
+          const fs = require("fs");
+          if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        }
+      } catch (_e) {}
       return res.status(400).json({
         success: false,
         errors: errors.array(),
@@ -211,21 +267,32 @@ const updateEmployee = async (req, res) => {
       });
     }
 
-    const {
-      name,
-      email,
-      phone,
-      address,
-      category,
-      categoryId,
-      dateJoined,
-      salary,
-      companyId,
-      documents,
-      emergencyContact,
-      workSchedule,
-      status,
-    } = req.body;
+    // Handle potential stringified JSON parts
+    const parseMaybeJSON = (val) => {
+      if (typeof val !== "string") return val;
+      try {
+        return JSON.parse(val);
+      } catch (_e) {
+        return val;
+      }
+    };
+
+    const name = req.body.name;
+    const email = req.body.email;
+    const phone = req.body.phone;
+    const address = parseMaybeJSON(req.body.address);
+    const category = req.body.category;
+    const categoryId = req.body.categoryId;
+    const dateJoined = req.body.dateJoined;
+    const dob = req.body.dob;
+    const salary = req.body.salary;
+    const companyId = req.body.companyId;
+    const documents = parseMaybeJSON(req.body.documents);
+    const emergencyContact = parseMaybeJSON(req.body.emergencyContact);
+    const workSchedule = parseMaybeJSON(req.body.workSchedule);
+    const pf = parseMaybeJSON(req.body.pf);
+    const esic = parseMaybeJSON(req.body.esic);
+    const status = req.body.status;
 
     // Check if email is being changed and if new email already exists
     if (email && email !== employee.email) {
@@ -261,9 +328,37 @@ const updateEmployee = async (req, res) => {
     if (category) employee.category = category;
     if (categoryId) employee.categoryId = categoryId;
     if (dateJoined) employee.dateJoined = dateJoined;
+    if (dob) employee.dob = dob;
     if (salary) employee.salary = salary;
     if (companyId) employee.companyId = companyId;
+    // Merge document fields, handle optional uploaded photo
     if (documents) employee.documents = { ...employee.documents, ...documents };
+    if (req.file && req.file.path) {
+      try {
+        const targetCompany = companyId || employee.companyId?.toString();
+        console.log(
+          `[Employees][Update] Photo file present. Uploading to Cloudinary. path=${req.file.path}, folder=employee-photos/${targetCompany}`
+        );
+        const uploaded = await uploadEmployeePhotoToCloudinary(req.file.path, {
+          folder: `employee-photos/${targetCompany}`,
+        });
+        employee.documents = {
+          ...(employee.documents || {}),
+          photo: uploaded.secure_url,
+        };
+        console.log(
+          `[Employees][Update] Photo uploaded to Cloudinary. url=${uploaded.secure_url}`
+        );
+      } catch (uploadErr) {
+        console.error(
+          `[Employees][Update] Failed uploading photo to Cloudinary: ${uploadErr?.message}`
+        );
+        return res.status(500).json({
+          success: false,
+          error: uploadErr.message || "Failed to upload photo",
+        });
+      }
+    }
     if (emergencyContact)
       employee.emergencyContact = {
         ...employee.emergencyContact,
@@ -271,6 +366,8 @@ const updateEmployee = async (req, res) => {
       };
     if (workSchedule)
       employee.workSchedule = { ...employee.workSchedule, ...workSchedule };
+    if (pf) employee.pf = { ...employee.pf, ...pf };
+    if (esic) employee.esic = { ...employee.esic, ...esic };
     if (status) employee.status = status;
 
     await employee.save();
@@ -283,7 +380,7 @@ const updateEmployee = async (req, res) => {
       data: employee,
     });
   } catch (error) {
-    console.error("Update employee error:", error);
+    console.error("[Employees][Update] Error:", error);
     res.status(500).json({
       success: false,
       error: error.message || "Error updating employee",

@@ -4,6 +4,20 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs").promises;
 const mongoose = require("mongoose");
+const {
+  uploadFileToCloudinary,
+  deleteFileFromCloudinary,
+} = require("../utils/cloudinaryUpload");
+
+// Helper function to calculate overtime threshold based on working days in month
+const getOvertimeThreshold = (totalDays) => {
+  // 30-day month: threshold is 26 days
+  // 31-day month: threshold is 27 days
+  // 28-day month: threshold is 24 days
+  // 29-day month: threshold is 25 days
+  // Formula: totalDays - 4
+  return totalDays - 4;
+};
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -57,8 +71,15 @@ const createInvoice = async (req, res) => {
     const {
       companyId,
       attendanceData,
+      fileUrl,
+      cloudinaryPublicId,
+      fileName,
+      fileType,
+      fileSize,
       gstPaidBy = "principal-employer",
       serviceChargeRate = 7,
+      bonusRate = 0,
+      overtimeRate = 1.5,
       calculatedValues,
     } = req.body;
 
@@ -81,10 +102,13 @@ const createInvoice = async (req, res) => {
     // Use calculated values from frontend if provided, otherwise calculate here
     let totalEmployees,
       totalPresentDays,
+      totalOvertimeDays,
       baseTotal,
+      overtimeAmount,
       serviceChargeTotal,
       pf,
       esic,
+      bonus,
       roundOffSubTotal,
       totalBeforeTax,
       cgst,
@@ -95,10 +119,13 @@ const createInvoice = async (req, res) => {
       // Use pre-calculated values from frontend
       totalEmployees = calculatedValues.totalEmployees;
       totalPresentDays = calculatedValues.totalPresentDays;
+      totalOvertimeDays = calculatedValues.totalOvertimeDays || 0;
       baseTotal = calculatedValues.baseTotal;
+      overtimeAmount = calculatedValues.overtimeAmount || 0;
       serviceChargeTotal = calculatedValues.serviceCharge;
       pf = calculatedValues.pfAmount;
       esic = calculatedValues.esicAmount;
+      bonus = calculatedValues.bonusAmount || 0;
       roundOffSubTotal = calculatedValues.subTotal;
       totalBeforeTax = calculatedValues.totalBeforeTax;
       cgst = calculatedValues.cgst;
@@ -107,18 +134,51 @@ const createInvoice = async (req, res) => {
     } else {
       // Fallback calculation if values not provided
       totalEmployees = attendanceData.length;
-      totalPresentDays = attendanceData.reduce(
-        (sum, emp) => sum + emp.present_day,
-        0
-      );
-      baseTotal = totalPresentDays * 466;
 
-      const serviceCharge = baseTotal * (parseFloat(serviceChargeRate) / 100);
-      pf = baseTotal * 0.13;
-      esic = baseTotal * 0.0325;
-      const subTotal = baseTotal + pf + esic;
+      // Determine the month's total working days
+      const workingDaysInMonth = Math.max(
+        ...attendanceData.map((emp) => emp.total_day || 0)
+      );
+      const overtimeThreshold = getOvertimeThreshold(workingDaysInMonth);
+
+      // Calculate regular and overtime days for each employee
+      let regularDays = 0;
+      let overtimeDays = 0;
+
+      attendanceData.forEach((emp) => {
+        const presentDay = emp.present_day || 0;
+        if (presentDay > overtimeThreshold) {
+          regularDays += overtimeThreshold;
+          overtimeDays += presentDay - overtimeThreshold;
+        } else {
+          regularDays += presentDay;
+        }
+      });
+
+      totalPresentDays = regularDays;
+      totalOvertimeDays = overtimeDays;
+
+      // Calculate base amount for regular days
+      const perDayRate = 466;
+      baseTotal = regularDays * perDayRate;
+
+      // Calculate overtime amount (overtime rate × per day rate × overtime days)
+      overtimeAmount = overtimeDays * perDayRate * parseFloat(overtimeRate);
+
+      // Calculate PF, ESIC, and Bonus on (baseTotal + overtimeAmount)
+      const totalBeforeStatutory = baseTotal + overtimeAmount;
+      pf = totalBeforeStatutory * 0.13;
+      esic = totalBeforeStatutory * 0.0325;
+      bonus = totalBeforeStatutory * (parseFloat(bonusRate) / 100);
+
+      // Calculate subtotal (baseTotal + overtime + PF + ESIC + Bonus)
+      const subTotal = baseTotal + overtimeAmount + pf + esic + bonus;
       roundOffSubTotal = Math.round(subTotal);
+
+      // Calculate service charge AFTER totaling PF, ESIC, and Bonus
+      const serviceCharge = roundOffSubTotal * (parseFloat(serviceChargeRate) / 100);
       serviceChargeTotal = serviceCharge;
+
       totalBeforeTax = roundOffSubTotal + serviceChargeTotal;
       cgst = totalBeforeTax * 0.09;
       sgst = totalBeforeTax * 0.09;
@@ -129,17 +189,40 @@ const createInvoice = async (req, res) => {
           : Math.round(totalBeforeTax);
     }
 
-    // Calculate salary details
+    // Calculate salary details with overtime breakdown
+    const workingDaysInMonth = Math.max(
+      ...attendanceData.map((emp) => emp.total_day || 0)
+    );
+    const overtimeThreshold = getOvertimeThreshold(workingDaysInMonth);
+    const perDayRate = calculatedValues?.perDayRate || 466;
+
     const processedEmployees = attendanceData.map((employee) => {
-      const gross =
-        employee.present_day * (calculatedValues?.perDayRate || 466);
+      const presentDay = employee.present_day || 0;
+
+      // Calculate regular and overtime days for this employee
+      let empRegularDays = presentDay;
+      let empOvertimeDays = 0;
+
+      if (presentDay > overtimeThreshold) {
+        empRegularDays = overtimeThreshold;
+        empOvertimeDays = presentDay - overtimeThreshold;
+      }
+
+      // Calculate gross pay (regular + overtime)
+      const regularPay = empRegularDays * perDayRate;
+      const overtimePay = empOvertimeDays * perDayRate * parseFloat(overtimeRate);
+      const gross = regularPay + overtimePay;
+
+      // Calculate deductions
       const epf = gross * 0.12;
       const esic = gross * 0.0075;
       const net = gross - (epf + esic);
 
       return {
         name: employee.name,
-        presentDays: employee.present_day,
+        presentDays: presentDay,
+        regularDays: empRegularDays,
+        overtimeDays: empOvertimeDays,
         totalDays: employee.total_day,
         salary: net,
       };
@@ -159,25 +242,31 @@ const createInvoice = async (req, res) => {
     const invoice = new Invoice({
       invoiceNumber,
       companyId,
-      fileName: `${invoiceNumber}.pdf`,
-      fileType: "pdf",
-      fileUrl: `/uploads/invoices/${invoiceNumber}.pdf`,
-      fileSize: JSON.stringify(attendanceData).length,
+      fileName: fileName || `${invoiceNumber}.pdf`,
+      fileType: fileType || "pdf",
+      fileUrl: fileUrl || `/uploads/invoices/${invoiceNumber}.pdf`,
+      cloudinaryPublicId: cloudinaryPublicId || undefined,
+      fileSize: fileSize || JSON.stringify(attendanceData).length,
       taxType: "gst",
       paymentMethod: "paid-by-us",
       gstPaidBy: gstPaidBy,
       serviceChargeRate: parseFloat(serviceChargeRate),
+      bonusRate: parseFloat(bonusRate),
+      overtimeRate: parseFloat(overtimeRate),
       billDetails: {
         baseAmount: baseTotal,
         serviceCharge: serviceChargeTotal,
         pfAmount: pf,
         esicAmount: esic,
+        bonusAmount: bonus,
+        overtimeAmount: overtimeAmount,
         gstAmount: cgst + sgst,
         totalAmount: grandTotal,
       },
       attendanceData: {
         totalEmployees,
         totalPresentDays,
+        totalOvertimeDays,
         perDayRate: 466,
         workingDays: Math.max(
           ...attendanceData.map((emp) => emp.total_day || 0)
@@ -199,12 +288,21 @@ const createInvoice = async (req, res) => {
         invoice,
         calculations: {
           baseTotal,
+          overtimeAmount,
           serviceCharge: serviceChargeTotal,
           pf,
           esic,
+          bonus,
           cgst,
           sgst,
           grandTotal,
+          overtimeDetails: {
+            totalOvertimeDays,
+            overtimeRate: parseFloat(overtimeRate),
+            overtimeThreshold: getOvertimeThreshold(
+              Math.max(...attendanceData.map((emp) => emp.total_day || 0))
+            ),
+          },
         },
       },
     });
@@ -516,13 +614,27 @@ const deleteInvoice = async (req, res) => {
       });
     }
 
-    // Delete associated file
+    // Delete associated file from Cloudinary or local storage
     if (invoice.fileUrl) {
-      const filePath = path.join(__dirname, "../../", invoice.fileUrl);
-      try {
-        await fs.unlink(filePath);
-      } catch (error) {
-        console.error("Error deleting file:", error);
+      // Check if it's a Cloudinary URL
+      if (invoice.fileUrl.includes("cloudinary.com")) {
+        // Extract public_id from Cloudinary URL or use stored cloudinaryPublicId
+        const publicId = invoice.cloudinaryPublicId;
+        if (publicId) {
+          try {
+            await deleteFileFromCloudinary(publicId, "raw");
+          } catch (error) {
+            console.error("Error deleting file from Cloudinary:", error);
+          }
+        }
+      } else {
+        // Delete from local storage
+        const filePath = path.join(__dirname, "../../", invoice.fileUrl);
+        try {
+          await fs.unlink(filePath);
+        } catch (error) {
+          console.error("Error deleting local file:", error);
+        }
       }
     }
 
@@ -644,6 +756,126 @@ const getAllInvoices = async (req, res) => {
   }
 };
 
+// Configure multer for invoice file uploads
+const invoiceStorage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadPath = path.join(__dirname, "../../uploads/invoices");
+    try {
+      await fs.mkdir(uploadPath, { recursive: true });
+      cb(null, uploadPath);
+    } catch (error) {
+      cb(error);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
+  },
+});
+
+const uploadInvoice = multer({
+  storage: invoiceStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          "Invalid file type. Only PDF, Excel, and image files are allowed."
+        )
+      );
+    }
+  },
+}).single("invoiceFile");
+
+// @desc    Upload invoice file to Cloudinary
+// @route   POST /api/invoices/upload-file
+// @access  Private
+const uploadInvoiceFile = async (req, res) => {
+  try {
+    uploadInvoice(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          error: err.message,
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: "No file uploaded",
+        });
+      }
+
+      const { invoiceNumber } = req.body;
+
+      try {
+        // Upload to Cloudinary
+        // Use 'raw' for PDFs, 'auto' for images and Excel files
+        const fileExtension = req.file.originalname.toLowerCase().split('.').pop();
+        const resourceType = fileExtension === 'pdf' ? 'raw' : 'auto';
+
+        const cloudinaryResult = await uploadFileToCloudinary(req.file.path, {
+          folder: "invoices",
+          public_id: invoiceNumber || undefined,
+          resource_type: resourceType,
+        });
+
+        // Delete local file after successful upload
+        try {
+          await fs.unlink(req.file.path);
+        } catch (cleanupError) {
+          console.error("Error cleaning up local file:", cleanupError);
+        }
+
+        res.status(200).json({
+          success: true,
+          data: {
+            fileUrl: cloudinaryResult.url,
+            publicId: cloudinaryResult.publicId,
+            fileName: req.file.originalname,
+            fileType: getFileType(req.file.originalname),
+            fileSize: cloudinaryResult.bytes,
+          },
+        });
+      } catch (uploadError) {
+        // Clean up local file on error
+        if (req.file && req.file.path) {
+          try {
+            await fs.unlink(req.file.path);
+          } catch (cleanupError) {
+            console.error("Error cleaning up file:", cleanupError);
+          }
+        }
+
+        res.status(500).json({
+          success: false,
+          error: uploadError.message || "Error uploading file to Cloudinary",
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Error uploading invoice file:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Error uploading invoice file",
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   processAttendanceFile,
@@ -653,4 +885,5 @@ module.exports = {
   deleteInvoice,
   getInvoiceStats,
   getAllInvoices,
+  uploadInvoiceFile,
 };

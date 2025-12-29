@@ -15,6 +15,7 @@ const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
 
 const router = express.Router();
+const { uploadEmployeePhotoOptional } = require("../middleware/imageUpload");
 
 // Validation rules
 const createEmployeeValidation = [
@@ -48,6 +49,20 @@ const createEmployeeValidation = [
     .optional()
     .isISO8601()
     .withMessage("Please provide a valid date"),
+  body("dob")
+    .optional()
+    .isISO8601()
+    .withMessage("Please provide a valid date of birth")
+    .custom((value) => {
+      if (value) {
+        const dob = new Date(value);
+        const age = (new Date() - dob) / (365.25 * 24 * 60 * 60 * 1000);
+        if (age < 18 || age > 100) {
+          throw new Error("Employee age must be between 18 and 100 years");
+        }
+      }
+      return true;
+    }),
   // Address (optional)
   body("address.street").optional().isString().trim(),
   body("address.city").optional().isString().trim(),
@@ -57,6 +72,7 @@ const createEmployeeValidation = [
   // Documents (optional container)
   body("documents.aadhar").optional().isString().trim(),
   body("documents.pan").optional().isString().trim(),
+  body("documents.uan").optional().isString().trim(),
   // Bank account (required in schema)
   body("documents.bankAccount.accountNumber")
     .exists({ checkFalsy: true })
@@ -78,6 +94,24 @@ const createEmployeeValidation = [
     .trim(),
   // Photo (optional)
   body("documents.photo").optional().isString().trim(),
+  // PF (optional)
+  body("pf.type")
+    .optional()
+    .isIn(["percentage", "fixed"])
+    .withMessage("PF type must be 'percentage' or 'fixed'"),
+  body("pf.value")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("PF value must be a positive number"),
+  // ESIC (optional)
+  body("esic.type")
+    .optional()
+    .isIn(["percentage", "fixed"])
+    .withMessage("ESIC type must be 'percentage' or 'fixed'"),
+  body("esic.value")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("ESIC value must be a positive number"),
   // Emergency contact (optional)
   body("emergencyContact.name").optional().isString().trim(),
   body("emergencyContact.relationship").optional().isString().trim(),
@@ -138,6 +172,20 @@ const updateEmployeeValidation = [
     .optional()
     .isISO8601()
     .withMessage("Please provide a valid date"),
+  body("dob")
+    .optional()
+    .isISO8601()
+    .withMessage("Please provide a valid date of birth")
+    .custom((value) => {
+      if (value) {
+        const dob = new Date(value);
+        const age = (new Date() - dob) / (365.25 * 24 * 60 * 60 * 1000);
+        if (age < 18 || age > 100) {
+          throw new Error("Employee age must be between 18 and 100 years");
+        }
+      }
+      return true;
+    }),
   // Address (optional fields)
   body("address.street").optional().isString().trim(),
   body("address.city").optional().isString().trim(),
@@ -147,10 +195,29 @@ const updateEmployeeValidation = [
   // Documents
   body("documents.aadhar").optional().isString().trim(),
   body("documents.pan").optional().isString().trim(),
+  body("documents.uan").optional().isString().trim(),
   body("documents.bankAccount.accountNumber").optional().isString().trim(),
   body("documents.bankAccount.ifscCode").optional().isString().trim(),
   body("documents.bankAccount.bankName").optional().isString().trim(),
   body("documents.photo").optional().isString().trim(),
+  // PF (optional)
+  body("pf.type")
+    .optional()
+    .isIn(["percentage", "fixed"])
+    .withMessage("PF type must be 'percentage' or 'fixed'"),
+  body("pf.value")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("PF value must be a positive number"),
+  // ESIC (optional)
+  body("esic.type")
+    .optional()
+    .isIn(["percentage", "fixed"])
+    .withMessage("ESIC type must be 'percentage' or 'fixed'"),
+  body("esic.value")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("ESIC value must be a positive number"),
   // Emergency contact
   body("emergencyContact.name").optional().isString().trim(),
   body("emergencyContact.relationship").optional().isString().trim(),
@@ -197,7 +264,14 @@ router.get("/company/:companyId", getEmployeesByCompany);
 // @route   POST /api/employees
 // @desc    Create new employee
 // @access  Private
-router.post("/", createEmployeeValidation, validate, createEmployee);
+// Accept multipart/form-data with optional photo field
+router.post(
+  "/",
+  uploadEmployeePhotoOptional,
+  createEmployeeValidation,
+  validate,
+  createEmployee
+);
 
 // @route   GET /api/employees
 // @desc    Get all employees with pagination
@@ -212,7 +286,14 @@ router.get("/:id", getEmployee);
 // @route   PUT /api/employees/:id
 // @desc    Update employee
 // @access  Private
-router.put("/:id", updateEmployeeValidation, validate, updateEmployee);
+// Accept multipart/form-data with optional photo field
+router.put(
+  "/:id",
+  uploadEmployeePhotoOptional,
+  updateEmployeeValidation,
+  validate,
+  updateEmployee
+);
 
 // @route   PUT /api/employees/:id/status
 // @desc    Update employee status
@@ -220,7 +301,7 @@ router.put("/:id", updateEmployeeValidation, validate, updateEmployee);
 router.put(
   "/:id/status",
   statusUpdateValidation,
-  validate,
+  // validate,
   updateEmployeeStatus
 );
 
