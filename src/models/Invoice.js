@@ -27,6 +27,10 @@ const invoiceSchema = new mongoose.Schema({
     required: [true, 'File URL is required'],
     trim: true
   },
+  cloudinaryPublicId: {
+    type: String,
+    trim: true
+  },
   fileSize: {
     type: Number,
     min: [0, 'File size cannot be negative']
@@ -52,6 +56,18 @@ const invoiceSchema = new mongoose.Schema({
     min: [0, 'Service charge rate cannot be negative'],
     max: [100, 'Service charge rate cannot exceed 100%']
   },
+  bonusRate: {
+    type: Number,
+    default: 0,
+    min: [0, 'Bonus rate cannot be negative'],
+    max: [100, 'Bonus rate cannot exceed 100%']
+  },
+  overtimeRate: {
+    type: Number,
+    default: 1.5,
+    min: [1, 'Overtime rate must be at least 1x'],
+    max: [3, 'Overtime rate cannot exceed 3x']
+  },
   billDetails: {
     baseAmount: {
       type: Number,
@@ -73,6 +89,16 @@ const invoiceSchema = new mongoose.Schema({
       default: 0,
       min: [0, 'ESIC amount cannot be negative']
     },
+    bonusAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Bonus amount cannot be negative']
+    },
+    overtimeAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Overtime amount cannot be negative']
+    },
     gstAmount: {
       type: Number,
       default: 0,
@@ -87,6 +113,7 @@ const invoiceSchema = new mongoose.Schema({
   attendanceData: {
     totalEmployees: { type: Number, min: 0 },
     totalPresentDays: { type: Number, min: 0 },
+    totalOvertimeDays: { type: Number, min: 0, default: 0 },
     perDayRate: { type: Number, min: 0 },
     workingDays: { type: Number, min: 0 }
   },
@@ -94,6 +121,8 @@ const invoiceSchema = new mongoose.Schema({
     extractedEmployees: [{
       name: { type: String, trim: true },
       presentDays: { type: Number, min: 0 },
+      regularDays: { type: Number, min: 0 },
+      overtimeDays: { type: Number, min: 0, default: 0 },
       totalDays: { type: Number, min: 0 },
       salary: { type: Number, min: 0 }
     }],
@@ -136,7 +165,21 @@ const invoiceSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  }
+  },
+  // For merged invoices - tracks which invoices were combined
+  isMerged: {
+    type: Boolean,
+    default: false
+  },
+  sourceInvoices: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Invoice'
+  }],
+  // Track which companies are included in merged invoice
+  mergedCompanies: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company'
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
