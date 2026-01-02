@@ -577,12 +577,44 @@ function generateFooter(doc, invoice) {
 // ============================================
 
 /**
- * Generate merged invoice header with company letterhead
+ * Generate merged invoice header with company letterhead image
  */
 function generateMergedHeader(doc) {
   const pageWidth = doc.page.width;
   const margin = 30;
 
+  // Use the header image from assets folder
+  const headerImagePath = path.join(__dirname, "../..", "assets", "invoice_header.jpeg");
+
+  try {
+    // Check if image exists and embed it
+    if (fs.existsSync(headerImagePath)) {
+      // Add header image - scale to fit page width with margins
+      const imageWidth = pageWidth - 2 * margin;
+      doc.image(headerImagePath, margin, 15, {
+        width: imageWidth,
+        align: "center"
+      });
+      // Set Y position after the image (approximate height based on aspect ratio)
+      doc.y = 95;
+    } else {
+      // Fallback to text-based header if image not found
+      console.warn("Header image not found at:", headerImagePath);
+      generateTextBasedHeader(doc, pageWidth, margin);
+    }
+  } catch (error) {
+    console.error("Error loading header image:", error);
+    // Fallback to text-based header
+    generateTextBasedHeader(doc, pageWidth, margin);
+  }
+
+  doc.y = 110;
+}
+
+/**
+ * Fallback text-based header if image is not available
+ */
+function generateTextBasedHeader(doc, pageWidth, margin) {
   // Left side - Company name and logo area
   doc
     .fontSize(18)
@@ -624,8 +656,6 @@ function generateMergedHeader(doc) {
     .font("Helvetica-Bold")
     .fillColor("#000")
     .text("INVOICE", margin, 87, { align: "center", width: pageWidth - 2 * margin });
-
-  doc.y = 110;
 }
 
 /**
