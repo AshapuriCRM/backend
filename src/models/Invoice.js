@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+console.log("=== Invoice.js MODEL LOADED (updated version - overtimeRate min:0, no max) ===");
+
 const invoiceSchema = new mongoose.Schema({
   invoiceNumber: {
     type: String,
@@ -64,9 +66,8 @@ const invoiceSchema = new mongoose.Schema({
   },
   overtimeRate: {
     type: Number,
-    default: 1.5,
-    min: [1, 'Overtime rate must be at least 1x'],
-    max: [3, 'Overtime rate cannot exceed 3x']
+    default: 0,
+    min: [0, 'Overtime rate cannot be negative']
   },
   billDetails: {
     baseAmount: {

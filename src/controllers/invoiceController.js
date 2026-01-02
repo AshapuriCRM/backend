@@ -68,6 +68,9 @@ const upload = multer({
 // @access  Private
 const createInvoice = async (req, res) => {
   try {
+    console.log("=== CREATE INVOICE DEBUG ===");
+    console.log("Raw req.body:", JSON.stringify(req.body, null, 2));
+
     const {
       companyId,
       attendanceData,
@@ -79,9 +82,12 @@ const createInvoice = async (req, res) => {
       gstPaidBy = "principal-employer",
       serviceChargeRate = 7,
       bonusRate = 0,
-      overtimeRate = 1.5,
+      overtimeRate = 0,
       calculatedValues,
     } = req.body;
+
+    console.log("Extracted overtimeRate:", overtimeRate, "Type:", typeof overtimeRate);
+    console.log("Extracted calculatedValues:", JSON.stringify(calculatedValues, null, 2));
 
     // Validate company exists
     const company = await Company.findById(companyId);
@@ -162,8 +168,8 @@ const createInvoice = async (req, res) => {
       const perDayRate = 466;
       baseTotal = regularDays * perDayRate;
 
-      // Calculate overtime amount (overtime rate × per day rate × overtime days)
-      overtimeAmount = overtimeDays * perDayRate * parseFloat(overtimeRate);
+      // Calculate overtime amount (overtime days × overtime rate per day)
+      overtimeAmount = overtimeDays * parseFloat(overtimeRate || 0);
 
       // Calculate PF, ESIC, and Bonus on (baseTotal + overtimeAmount)
       const totalBeforeStatutory = baseTotal + overtimeAmount;
@@ -210,7 +216,7 @@ const createInvoice = async (req, res) => {
 
       // Calculate gross pay (regular + overtime)
       const regularPay = empRegularDays * perDayRate;
-      const overtimePay = empOvertimeDays * perDayRate * parseFloat(overtimeRate);
+      const overtimePay = empOvertimeDays * parseFloat(overtimeRate || 0);
       const gross = regularPay + overtimePay;
 
       // Calculate deductions
@@ -239,6 +245,10 @@ const createInvoice = async (req, res) => {
     const invoiceNumber = `INV-${year}-${String(count + 1).padStart(3, "0")}`;
 
     // Create invoice record
+    const parsedOvertimeRate = parseFloat(overtimeRate) || 0;
+    console.log("=== BEFORE INVOICE CREATION ===");
+    console.log("overtimeRate being saved:", parsedOvertimeRate);
+
     const invoice = new Invoice({
       invoiceNumber,
       companyId,
@@ -252,7 +262,7 @@ const createInvoice = async (req, res) => {
       gstPaidBy: gstPaidBy,
       serviceChargeRate: parseFloat(serviceChargeRate),
       bonusRate: parseFloat(bonusRate),
-      overtimeRate: parseFloat(overtimeRate),
+      overtimeRate: parsedOvertimeRate,
       billDetails: {
         baseAmount: baseTotal,
         serviceCharge: serviceChargeTotal,
@@ -307,8 +317,11 @@ const createInvoice = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error creating invoice:", error);
-    console.error("Error details:", error.errors);
+    console.error("=== INVOICE CREATION ERROR ===");
+    console.error("Error message:", error.message);
+    console.error("Error name:", error.name);
+    console.error("Error details:", JSON.stringify(error.errors, null, 2));
+    console.error("Full error:", error);
     res.status(500).json({
       success: false,
       error: error.message || "Error creating invoice",
