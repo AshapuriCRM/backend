@@ -266,7 +266,7 @@ const mergeInvoices = async (req, res) => {
         ...invoices.map((inv) => inv.serviceChargeRate || 7)
       ),
       bonusRate: Math.max(...invoices.map((inv) => inv.bonusRate || 0)),
-      overtimeRate: Math.max(...invoices.map((inv) => inv.overtimeRate || 1.5)),
+      overtimeRate: Math.max(...invoices.map((inv) => inv.overtimeRate || 0)),
       billDetails: mergedBillDetails,
       attendanceData: mergedAttendanceData,
       processedData: {

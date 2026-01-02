@@ -81,10 +81,10 @@ const jobCategorySchema = new mongoose.Schema({
       min: [1, 'Working days must be at least 1'],
       max: [31, 'Working days cannot exceed 31']
     },
-    overtimeRate: { 
-      type: Number, 
-      default: 1.5,
-      min: [1, 'Overtime rate must be at least 1x']
+    overtimeRate: {
+      type: Number,
+      default: 0,
+      min: [0, 'Overtime rate cannot be negative']
     }
   },
   requirements: {
